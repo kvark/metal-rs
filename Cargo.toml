@@ -24,8 +24,11 @@ block = "0.1.5"
 foreign-types = "0.3"
 
 [dependencies.objc]
-version = "0.2.1"
-features = ["objc_exception"]
+#version = "0.2.1"
+git = "https://github.com/mystor/rust-objc"
+branch = "static_sel"
+features = ["objc_exception", "static_sel"]
+#features = ["objc_exception"]
 
 [dev-dependencies]
 winit = "0.13"

@@ -117,6 +117,20 @@ macro_rules! class {
             $( fn $fun:ident(&self) -> $ret:ty; )*
         }
     ) => (
+        $(
+            mod $fun {
+                const LEN: usize = stringify!($fun).len() + 1;
+                #[repr(C)]
+                struct SendSyncWrap(*const [u8; LEN]);
+                unsafe impl Send for SendSyncWrap {}
+                unsafe impl Sync for SendSyncWrap {}
+
+                #[link_section="__TEXT,__objc_methname,cstring_literals"]
+                static VALUE : [u8; LEN] = concat!(stringify!($fun), '\0');
+                #[link_section="__DATA,__objc_selrefs,literal_pointers,no_dead_strip"]
+                pub static REF : SendSyncWrap = SendSyncWrap(&VALUE);
+            }
+        )*
         mod sel_simple {
             $(
                 #[link_section="__TEXT,__objc_methname,cstring_literals"]
@@ -144,7 +158,7 @@ macro_rules! class {
         mod sel_complex {
             $(
                 #[link_section="__TEXT,__objc_methname,cstring_literals"]
-                pub static $fun: &'static str = concat!($( stringify!($param), ':' )+, '\0');
+                pub static $fun: &'static str = concat!($( stringify!($param), ':' ),+, '\0');
             )*
         }
         impl $name {

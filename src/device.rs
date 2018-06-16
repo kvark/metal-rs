@@ -114,18 +114,44 @@ impl Device {
     }
 }
 
-class!(DeviceRef {
+/*class!(DeviceRef {
     fn name(&self) -> &NSString;
-});
+});*/
+
+#[no_mangle]
+#[link_section="__DATA,__objc_imageinfo,regular,no_dead_strip"]
+static info_version: u32 = 0;
+#[no_mangle]
+#[link_section="__DATA,__objc_imageinfo,regular,no_dead_strip"]
+static info_flags: u32 = 64;
 
 impl DeviceRef {
-    /*
+    pub fn name2(&self) -> &str {
+        struct Foo(*const [u8; 5]);
+        unsafe impl Send for Foo {}
+        unsafe impl Sync for Foo {}
+
+        let s: &NSString = {
+            #[no_mangle]
+            #[link_section="__TEXT,__objc_methname,cstring_literals"]
+            static OBJC_METHOD_VAR_NAME_ : [u8; 5] = *b"name\0";
+            #[no_mangle]
+            #[link_section="__DATA,__objc_selrefs,literal_pointers,no_dead_strip"]
+            static OBJ_SELECTOR_REFERENCES_: Foo = Foo(&OBJC_METHOD_VAR_NAME_);
+            unsafe {
+                let selector: objc::runtime::Sel = mem::transmute(OBJ_SELECTOR_REFERENCES_.0);
+                objc::__send_message(self, selector, ()).unwrap()
+            }
+        };
+
+        s.as_str()
+    }
     pub fn name(&self) -> &str {
         unsafe {
             let name: &NSString = msg_send![self, name];
             name.as_str()
         }
-    }*/
+    }
 
     pub fn vendor(&self) -> &str {
         unsafe {
