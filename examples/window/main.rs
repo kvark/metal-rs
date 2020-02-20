@@ -58,7 +58,7 @@ fn prepare_render_pass_descriptor(descriptor: &RenderPassDescriptorRef, texture:
 }
 
 fn main() {
-    let mut events_loop = winit::event_loop::EventLoop::new();
+    let events_loop = winit::event_loop::EventLoop::new();
     let size = winit::dpi::LogicalSize::new(800, 600);
 
     let window = winit::window::WindowBuilder::new()
@@ -76,7 +76,7 @@ fn main() {
 
     unsafe {
         let view = window.ns_view() as cocoa_id;
-        view.setWantsBestResolutionOpenGLSurface_(YES);
+        //view.setWantsBestResolutionOpenGLSurface_(YES);
         view.setWantsLayer(YES);
         view.setLayer(mem::transmute(layer.as_ref()));
     }
@@ -97,99 +97,93 @@ fn main() {
         ];
 
         device.new_buffer_with_data(
-            unsafe { mem::transmute(vertex_data.as_ptr()) },
+            vertex_data.as_ptr() as *const _,
             (vertex_data.len() * mem::size_of::<f32>()) as u64,
-            MTLResourceOptions::CPUCacheModeDefaultCache,
+            MTLResourceOptions::CPUCacheModeDefaultCache | MTLResourceOptions::StorageModeManaged,
         )
     };
 
     let mut r = 0.0f32;
 
     events_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Wait;
+        *control_flow = ControlFlow::Poll;
 
         match event {
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
+                WindowEvent::Resized(size) => {
+                    layer.set_drawable_size(CGSize::new(size.width as f64, size.height as f64));
+                }
                 _ => ()
             }
             Event::MainEventsCleared => {
                 window.request_redraw();
             }
             Event::RedrawRequested(_) => {
-                if let Some(drawable) = layer.next_drawable() {
-                    let render_pass_descriptor = RenderPassDescriptor::new();
-                    let _a = prepare_render_pass_descriptor(&render_pass_descriptor, drawable.texture());
+                let drawable = match layer.next_drawable() {
+                    Some(drawable) => drawable,
+                    None => return,
+                };
 
-                    let command_buffer = command_queue.new_command_buffer();
-                    let parallel_encoder =
-                        command_buffer.new_parallel_render_command_encoder(&render_pass_descriptor);
-                    let encoder = parallel_encoder.render_command_encoder();
-                    encoder.set_render_pipeline_state(&pipeline_state);
-                    encoder.set_vertex_buffer(0, Some(&vbuf), 0);
-                    encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, 3);
-                    encoder.end_encoding();
-                    parallel_encoder.end_encoding();
+                let render_pass_descriptor = RenderPassDescriptor::new();
+                let _a = prepare_render_pass_descriptor(&render_pass_descriptor, drawable.texture());
 
-                    render_pass_descriptor
-                        .color_attachments()
-                        .object_at(0)
-                        .unwrap()
-                        .set_load_action(MTLLoadAction::DontCare);
+                let command_buffer = command_queue.new_command_buffer();
+                let encoder = command_buffer.new_render_command_encoder(&render_pass_descriptor);
+                encoder.set_render_pipeline_state(&pipeline_state);
+                encoder.set_vertex_buffer(0, Some(&vbuf), 0);
+                encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, 3);
+                encoder.end_encoding();
 
-                    let parallel_encoder =
-                        command_buffer.new_parallel_render_command_encoder(&render_pass_descriptor);
-                    let encoder = parallel_encoder.render_command_encoder();
-                    let p = vbuf.contents();
-                    let vertex_data: &[u8; 60] = unsafe {
-                        mem::transmute(&[
-                            0.0f32,
-                            0.5,
-                            1.0,
-                            0.0 - r,
-                            0.0,
-                            -0.5,
-                            -0.5,
-                            0.0,
-                            1.0 - r,
-                            0.0,
-                            0.5,
-                            0.5,
-                            0.0,
-                            0.0,
-                            1.0 + r,
-                        ])
-                    };
-                    use std::ptr;
+                render_pass_descriptor
+                    .color_attachments()
+                    .object_at(0)
+                    .unwrap()
+                    .set_load_action(MTLLoadAction::DontCare);
 
-                    unsafe {
-                        ptr::copy(
-                            vertex_data.as_ptr(),
-                            p as *mut u8,
-                            (vertex_data.len() * mem::size_of::<f32>()) as usize,
-                        );
-                    }
-                    vbuf.did_modify_range(NSRange::new(
-                        0 as u64,
-                        (vertex_data.len() * mem::size_of::<f32>()) as u64,
-                    ));
+                    let encoder = command_buffer.new_render_command_encoder(&render_pass_descriptor);
+                let p = vbuf.contents();
+                let vertex_data = [
+                    0.0f32,
+                    0.5,
+                    1.0,
+                    0.0 - r,
+                    0.0,
+                    -0.5,
+                    -0.5,
+                    0.0,
+                    1.0 - r,
+                    0.0,
+                    0.5,
+                    0.5,
+                    0.0,
+                    0.0,
+                    1.0 + r,
+                ];
 
-                    encoder.set_render_pipeline_state(&pipeline_state);
-                    encoder.set_vertex_buffer(0, Some(&vbuf), 0);
-                    encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, 3);
-                    encoder.end_encoding();
-                    parallel_encoder.end_encoding();
-
-                    command_buffer.present_drawable(&drawable);
-                    command_buffer.commit();
-
-                    r += 0.01f32;
-                    //let _: () = msg_send![command_queue.0, _submitAvailableCommandBuffers];
+                unsafe {
+                    std::ptr::copy(
+                        vertex_data.as_ptr(),
+                        p as *mut f32,
+                        (vertex_data.len() * mem::size_of::<f32>()) as usize,
+                    );
                 }
+                vbuf.did_modify_range(NSRange::new(
+                    0 as u64,
+                    (vertex_data.len() * mem::size_of::<f32>()) as u64,
+                ));
+
+                encoder.set_render_pipeline_state(&pipeline_state);
+                encoder.set_vertex_buffer(0, Some(&vbuf), 0);
+                encoder.draw_primitives(MTLPrimitiveType::Triangle, 0, 3);
+                encoder.end_encoding();
+
+                command_buffer.present_drawable(&drawable);
+                command_buffer.commit();
+
+                r += 0.01f32;
             },
-            _ => {
-                *control_flow = ControlFlow::Wait;
-            }
+            _ => {}
         }
     });
 }
