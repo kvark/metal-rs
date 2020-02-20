@@ -31,7 +31,7 @@ version = "0.2.4"
 features = ["objc_exception"]
 
 [dev-dependencies]
-winit = "0.19"
+winit = "0.21"
 sema = "0.1.4"
 
 
